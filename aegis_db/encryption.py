@@ -1,8 +1,8 @@
 from threading import Lock
 from concrete import fhe
-from logger import logger
+from .logger import logger
 import numpy as np
-from exceptions import EncryptionError
+from .exceptions import EncryptionError
 import time
 
 class AegisEncryptorContext:
@@ -15,6 +15,7 @@ class AegisEncryptorContext:
     encryptor_circuit: fhe.Circuit
     add_circuit: fhe.Circuit
     multiply_circuit: fhe.Circuit
+    compare_circuit: fhe.Circuit
 
     def __new__(cls, *args, **kwargs):
         with cls._lock:
@@ -41,6 +42,10 @@ class AegisEncryptorContext:
             @fhe.compiler({"x": "encrypted", "y": "encrypted"})
             def multiply_func(x, y):
                 return x * y
+            
+            @fhe.compiler({"x": "encrypted", "y": "encrypted"})
+            def compare_func(x, y):
+                return x == y
 
             # Use minimal input set for testing
             inputset = [np.array([i], dtype=np.uint8) for i in range(256)]
@@ -58,6 +63,11 @@ class AegisEncryptorContext:
 
             logger.info("Compiling multiplication circuit...")
             self.multiply_circuit = multiply_func.compile(
+                inputset=[(i, j) for i in inputset for j in inputset],
+            )
+
+            logger.info("Compiling comparison circuit...")
+            self.compare_circuit = compare_func.compile(
                 inputset=[(i, j) for i in inputset for j in inputset],
             )
 

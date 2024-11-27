@@ -1,0 +1,3 @@
+.venv/
+aegis_db/__pycache__/
+*.sqlite3

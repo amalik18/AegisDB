@@ -1,9 +1,9 @@
 import sqlite3
 from threading import RLock
-from config import Config
-from exceptions import DatabaseError, EncryptionError, KeyNotFoundError
-from encryption import AegisEncryptorContext
-from logger import logger
+from .config import Config
+from .exceptions import DatabaseError, EncryptionError, KeyNotFoundError
+from .encryption import AegisEncryptorContext
+from .logger import logger
 from concrete import fhe
 from typing import Optional
 import numpy as np
@@ -13,9 +13,9 @@ class AegisDB:
     """
     A NoSQL key-value store that supports fully homomorphic encryption.
     """
-    def __init__(self):
+    def __init__(self, config: Config = Config()):
         self.lock = RLock()
-        self.connection = sqlite3.connect(Config.DATABASE_FILE, check_same_thread=False)
+        self.connection = sqlite3.connect(config.DATABASE_FILE, check_same_thread=False)
         self.cursor = self.connection.cursor()
         self._create_table()
         self.HE_context = AegisEncryptorContext()
@@ -39,7 +39,6 @@ class AegisDB:
                 encrypted_value = self.HE_context.encryptor_circuit.encrypt(np.array([value]))
                 # Serialize the encrypted value
                 encrypted_blob = self.HE_context.serialize(encrypted_value)
-                logger.info(f'Encrypted value: {encrypted_blob}')
 
                 self.cursor.execute('''
                     INSERT OR REPLACE INTO kv_store (key, value) VALUES (?, ?)
@@ -124,6 +123,37 @@ class AegisDB:
             except Exception as e:
                 logger.exception("Failed to perform multiplication.")
                 raise DatabaseError("Failed to perform multiplication.") from e
+    
+
+    def search(self, value: str) -> list:
+        with self.lock:
+            if not isinstance(value, int):
+                raise ValueError("Value must be an integer.")
+            try:
+                encrypted_search_value = self.HE_context.encryptor_circuit.encrypt(np.array([value]))
+                # Serialize the encrypted value
+                encrypted_blob = self.HE_context.serialize(encrypted_value)
+                logger.info(f'Encrypted value: {encrypted_blob}')
+                matching_keys = []
+                self.cursor.execute('SELECT key, value FROM kv_store')
+                
+                for key, encrypted_blob in self.cursor.fetchall():
+                    # Deserialize the encrypted value
+                    encrypted_value = self.HE_context.deserialize(encrypted_blob)
+                    comparison_result = self.HE_context.compare_circuit.encrypt_run_decrypt(
+                        encrypted_value,
+                        encrypted_search_value,
+                    )
+                    if int(comparison_result[0]) == 1:
+                        matching_keys.append(key)
+                
+                logger.info(f"Search complete! Found {len(matching_keys)} matching keys.")
+                return matching_keys
+
+            except Exception as e:
+                logger.exception(f"Failed to search for value '{value}' in database.")
+                raise DatabaseError(f"Failed to search for value '{value}' in database.") from e
+
 
     def _get_encrypted_value(self, key: str):
         self.cursor.execute('SELECT value FROM kv_store WHERE key = ?', (key,))
