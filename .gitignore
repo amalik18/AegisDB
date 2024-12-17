@@ -1,3 +1,16 @@
 .venv/
+aegis_db/__pycache__/*
 aegis_db/__pycache__/
-*.sqlite3
+*.sqlite
+*/__pycache__/*
+*/.artifacts/
+*/.artifacts
+*/.vscode/
+*/.vscode
+*/.idea/
+*/.idea
+*/.pytest_cache/
+*/.pytest_cache
+*/.mypy_cache/
+*/.mypy_cache
+*/

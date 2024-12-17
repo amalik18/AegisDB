@@ -48,31 +48,43 @@ class AegisEncryptorContext:
                 return x == y
 
             # Use minimal input set for testing
-            inputset = [np.array([i], dtype=np.uint8) for i in range(256)]
-
+            inputset = fhe.inputset(fhe.uint8)
+            inputset_double = fhe.inputset(fhe.uint8, fhe.uint8)
             # Compile circuits
             logger.info("Compiling encryption circuit...")
+            time1 = time.time()
             self.encryptor_circuit = encrypt_func.compile(
                 inputset=inputset
             )
+            print(time.time() - time1)
+            time.sleep(1)
 
             logger.info("Compiling addition circuit...")
+            time1 = time.time()
             self.add_circuit = add_func.compile(
-                inputset=[(i, j) for i in inputset for j in inputset]
+                inputset=inputset_double
             )
+            print(time.time() - time1)
+            time.sleep(1)
 
             logger.info("Compiling multiplication circuit...")
+            time1 = time.time()
             self.multiply_circuit = multiply_func.compile(
-                inputset=[(i, j) for i in inputset for j in inputset],
+                inputset=inputset_double,
             )
+            print(time.time() - time1)
+            time.sleep(1)
 
             logger.info("Compiling comparison circuit...")
+            time1 = time.time()
             self.compare_circuit = compare_func.compile(
-                inputset=[(i, j) for i in inputset for j in inputset],
+                inputset=inputset_double,
             )
+            print(time.time() - time1)
+            time.sleep(1)
 
             self._initialized = True
-            print('made it past initiation and compilation')
+            # print('made it past initiation and compilation')
             time.sleep(5)
         except Exception as e:
             logger.exception("Failed to initialize encryption context.")
@@ -81,6 +93,7 @@ class AegisEncryptorContext:
     def serialize(self, encrypted_value: fhe.Value) -> bytes:
         return encrypted_value.serialize()
     
-    def deserialize(self, encrypted_blob: bytes) -> fhe.Value:
+    def deserialize(self, encrypted_blob: bytes):
         return fhe.Value.deserialize(encrypted_blob)
+
     

@@ -4,9 +4,10 @@ from .config import Config
 from .exceptions import DatabaseError, EncryptionError, KeyNotFoundError
 from .encryption import AegisEncryptorContext
 from .logger import logger
-from concrete import fhe
+from concrete import fhe, compiler
 from typing import Optional
 import numpy as np
+
 
 
 class AegisDB:
@@ -36,9 +37,9 @@ class AegisDB:
             if not isinstance(value, int):
                 raise ValueError("Value must be an integer.")
             try:
-                encrypted_value = self.HE_context.encryptor_circuit.encrypt(np.array([value]))
+                encrypted_value = self.HE_context.encryptor_circuit.encrypt(value)
                 # Serialize the encrypted value
-                encrypted_blob = self.HE_context.serialize(encrypted_value)
+                encrypted_blob = encrypted_value.serialize()
 
                 self.cursor.execute('''
                     INSERT OR REPLACE INTO kv_store (key, value) VALUES (?, ?)
@@ -61,7 +62,7 @@ class AegisDB:
                     # encrypted_value = self.HE_context.encryptor_circuit.deserialize_ciphertext(encrypted_blob)
                     decrypted_value = self.HE_context.encryptor_circuit.decrypt(encrypted_value)
                     logger.info(f"Retrieved and decrypted value for key '{key}'.")
-                    return int(decrypted_value[0])
+                    return int(decrypted_value)
                 except Exception as e:
                     logger.exception("Failed to decrypt value from database.")
                     raise EncryptionError("Failed to decrypt value from database.") from e
@@ -80,17 +81,22 @@ class AegisDB:
 
     def add(self, key1: str, key2: str, result_key: str):
         with self.lock:
-            encrypted_value1 = self._get_encrypted_value(key1)
-            encrypted_value2 = self._get_encrypted_value(key2)
+            val1 = self.get(key1)
+            val2 = self.get(key2)
+
+            # deserialize_1 = int(self.HE_context.deserialize(encrypted_value1))
+            # deserialize_2 = int(self.HE_context.deserialize(encrypted_value2))
 
             try:
                 # Perform homomorphic addition
-                encrypted_result = self.HE_context.add_circuit.encrypt(
-                    encrypted_value1,
-                    encrypted_value2,
+                encrypted_result = self.HE_context.add_circuit.encrypt_run_decrypt(
+                    val1,
+                    val2
                 )
+
+                logger.info(f"Encrypted result: {encrypted_result}")
                 # Serialize the encrypted result
-                encrypted_blob = self.HE_context.serialize(encrypted_result)
+                encrypted_blob = self.HE_context.encryptor_circuit.encrypt(encrypted_result).serialize()
 
                 self.cursor.execute('''
                     INSERT OR REPLACE INTO kv_store (key, value) VALUES (?, ?)
@@ -101,19 +107,20 @@ class AegisDB:
                 logger.exception("Failed to perform addition.")
                 raise DatabaseError("Failed to perform addition.") from e
 
+
     def multiply(self, key1: str, key2: str, result_key: str):
         with self.lock:
-            encrypted_value1 = self._get_encrypted_value(key1)
-            encrypted_value2 = self._get_encrypted_value(key2)
+            val1 = self.get(key1)
+            val2 = self.get(key2)
 
             try:
                 # Perform homomorphic multiplication
-                encrypted_result = self.HE_context.multiply_circuit.encrypt(
-                    encrypted_value1,
-                    encrypted_value2,
+                encrypted_result = self.HE_context.multiply_circuit.encrypt_run_decrypt(
+                    val1,
+                    val2,
                 )
                 # Serialize the encrypted result
-                encrypted_blob = self.HE_context.serialize(encrypted_result)
+                encrypted_blob = self.HE_context.encryptor_circuit.encrypt(encrypted_result).serialize()
 
                 self.cursor.execute('''
                     INSERT OR REPLACE INTO kv_store (key, value) VALUES (?, ?)
@@ -124,13 +131,28 @@ class AegisDB:
                 logger.exception("Failed to perform multiplication.")
                 raise DatabaseError("Failed to perform multiplication.") from e
     
+    def compare(self, key1: str, key2: str) -> bool:
+        with self.lock:
+            val1 = self.get(key1)
+            val2 = self.get(key2)
+
+            try:
+                comparison_result = self.HE_context.compare_circuit.encrypt_run_decrypt(
+                    val1,
+                    val2,
+                )
+                return bool(comparison_result)
+            except Exception as e:
+                logger.exception("Failed to compare values.")
+                raise DatabaseError("Failed to compare values.") from e
+    
 
     def search(self, value: str) -> list:
         with self.lock:
             if not isinstance(value, int):
                 raise ValueError("Value must be an integer.")
             try:
-                encrypted_search_value = self.HE_context.encryptor_circuit.encrypt(np.array([value]))
+                encrypted_search_value = self.HE_context.encryptor_circuit.encrypt(value)
                 # Serialize the encrypted value
                 encrypted_blob = self.HE_context.serialize(encrypted_value)
                 logger.info(f'Encrypted value: {encrypted_blob}')
