@@ -1,6 +1,5 @@
 .venv/
-aegis_db/__pycache__/*
-aegis_db/__pycache__/
+**/__pycache__/
 *.sqlite
 */__pycache__/*
 */.artifacts/
